@@ -1,0 +1,3 @@
+#!python
+import saltgrowler.cli
+saltgrowler.cli.main()

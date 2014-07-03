@@ -30,12 +30,9 @@ JID: {jid}
 Return: {return}
 '''.strip()
 
-SENT_BY = socket.getfqdn()
-
-
 class SaltGrowler(gntp.config.GrowlNotifier):
     def add_origin_info(self, packet):
-        packet.add_header('Sent-By', SENT_BY)
+        packet.add_header('Sent-By', socket.getfqdn())
 
 
 class EventReader(object):
@@ -53,8 +50,6 @@ class EventReader(object):
         for obj in EventReader.__dict__.itervalues():
             if hasattr(obj, 'event'):
                 self.events[obj.event] = obj
-
-        #import code; code.interact(local=locals())
 
     def register(event):
         def wrap(func):
@@ -115,8 +110,3 @@ class EventReader(object):
             pprint.pformat(ret['data']),
             **kwargs
         )
-
-if __name__ == '__main__':
-    logging.root.handlers = []
-    logging.basicConfig(level=logging.INFO)
-    EventReader().dispatcher()
