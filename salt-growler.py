@@ -3,7 +3,6 @@ import pprint
 import logging
 import socket
 from fnmatch import fnmatch
-logging.basicConfig(level=logging.INFO)
 
 # Import Salt libs
 import salt.utils.event
@@ -39,67 +38,85 @@ class SaltGrowler(gntp.config.GrowlNotifier):
         packet.add_header('Sent-By', SENT_BY)
 
 
-def main():
-    event = salt.utils.event.SaltEvent(
-        __opts__['node'],
-        __opts__['sock_dir']
-    )
-    logger.info('Listening on %s', event.puburi)
+class EventReader(object):
+    def __init__(self):
+        self.event = salt.utils.event.SaltEvent(
+            __opts__['node'],
+            __opts__['sock_dir']
+        )
+        logger.info('Listening on %s', self.event.puburi)
 
-    growl = SaltGrowler(**GROWL_SETTINGS)
-    growl.register()
+        self.growl = SaltGrowler(**GROWL_SETTINGS)
+        self.growl.register()
 
-    while True:
-        ret = event.get_event(full=True)
-        if ret is None:
-            continue
-        if ret['tag'] == 'salt/auth':
-            continue
+        self.events = {}
+        for obj in EventReader.__dict__.itervalues():
+            if hasattr(obj, 'event'):
+                self.events[obj.event] = obj
 
-        logger.info('Tag: %s', ret['tag'])
-        logger.debug('Event: %s', ret)
-        try:
-            kwargs = {
-                'identifier': ret['tag'],
-            }
-            kwargs['sticky'] = True
+        #import code; code.interact(local=locals())
+
+    def register(event):
+        def wrap(func):
+            setattr(func, 'event', event)
+            return func
+        return wrap
+
+    def dispatcher(self):
+        while True:
+            ret = self.event.get_event(full=True)
+            if ret is None:
+                continue
+            # salt/auth is surprisingly noisy so for now we will
+            # skip over it
             if ret['tag'] == 'salt/auth':
-                growl.notify(
-                    'Auth',
-                    ret['tag'],
-                    pprint.pformat(ret['data']),
-                    **kwargs
-                )
-
-            # Specific matches
-            elif fnmatch(ret['tag'], 'salt/minion/*/start'):
-                growl.notify(
-                    'Start',
-                    ret['tag'],
-                    ret['data'],
-                    **kwargs
-                )
-            elif fnmatch(ret['tag'], 'salt/job/*/new'):
-                growl.notify(
-                    'Job',
-                    ret['tag'],
-                    pprint.pformat(ret['data']),
-                    **kwargs
-                )
-            elif fnmatch(ret['tag'], 'salt/job/*/ret/*'):
-                kwargs['sticky'] = True
-                growl.notify(
-                    'Results',
-                    ret['tag'],
-                    TEMPLATE_RETURN.format(**ret['data']),
-                    **kwargs
-                )
+                continue
+            for event, func in self.events.iteritems():
+                if fnmatch(ret['tag'], event):
+                    func(self, ret, identifier=ret['tag'])
+                    break
             else:
                 logger.info('Unhandled tag: %s', ret['tag'])
                 logger.debug(pprint.pformat(ret))
-        except KeyError:
-            logger.exception(pprint.pformat(ret))
 
+    @register('salt/minion/*/start')
+    def minion_start(self, ret, **kwargs):
+        self.growl.notify(
+            'Start',
+            ret['tag'],
+            ret['data'],
+            **kwargs
+        )
+
+    @register('salt/job/*/new')
+    def job_new(self, ret, **kwargs):
+        self.growl.notify(
+            'Job',
+            ret['tag'],
+            pprint.pformat(ret['data']),
+            **kwargs
+        )
+
+    @register('salt/job/*/ret/*')
+    def job_return(self, ret, **kwargs):
+        kwargs['sticky'] = True
+        self.growl.notify(
+            'Results',
+            ret['tag'],
+            TEMPLATE_RETURN.format(**ret['data']),
+            **kwargs
+        )
+
+    @register('salt/auth')
+    def salt_auth(self, ret, **kwargs):
+        self.growl.notify(
+            'Auth',
+            ret['tag'],
+            pprint.pformat(ret['data']),
+            **kwargs
+        )
 
 if __name__ == '__main__':
-    main()
+    logging.root.handlers = []
+    logging.basicConfig(level=logging.INFO)
+    EventReader().dispatcher()
