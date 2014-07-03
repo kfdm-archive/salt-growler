@@ -1,7 +1,7 @@
 try:
     from setuptools import setup
     kwargs = {
-        'entry_points':{
+        'entry_points': {
             'console_scripts': [
                 'salt-growler = saltgrowler.cli:main'
             ]
@@ -10,7 +10,7 @@ try:
 except ImportError:
     from distutils.core import setup
     kwargs = {
-        'scripts':['scripts/salt-growler']
+        'scripts': ['scripts/salt-growler']
     }
 
 setup(
@@ -21,6 +21,6 @@ setup(
     url='https://github.com/kfdm/salt-growler/',
     version='0.1',
     packages=['saltgrowler'],
-	install_requires=['gntp'],
+    install_requires=['gntp'],
     **kwargs
 )

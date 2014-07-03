@@ -30,6 +30,7 @@ JID: {jid}
 Return: {return}
 '''.strip()
 
+
 class SaltGrowler(gntp.config.GrowlNotifier):
     def add_origin_info(self, packet):
         packet.add_header('Sent-By', socket.getfqdn())
